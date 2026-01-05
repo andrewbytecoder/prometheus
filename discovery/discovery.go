@@ -24,6 +24,9 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 )
 
+// discoveryManagerScrape 组件用于发现指标采集服务，对应prometheus.yml配置文件中scrape_configs节点下的各种指标采集器
+//（static_config、kubernetes_sd_config、openstack_sd_config、consul_sd_config 等）
+
 // Discoverer provides information about target groups. It maintains a set
 // of sources from which TargetGroups can originate. Whenever a discovery provider
 // detects a potential change, it sends the TargetGroup through its channel.

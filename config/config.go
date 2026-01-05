@@ -656,12 +656,16 @@ type ScrapeConfigs struct {
 // ScrapeConfig configures a scraping unit for Prometheus.
 type ScrapeConfig struct {
 	// The job name to which the job label is set by default.
+	// job 名，所有抓取指标里面会显示是哪个job抓取的
 	JobName string `yaml:"job_name"`
 	// Indicator whether the scraped metrics should remain unmodified.
+	// 抓取指标是否保持原始格式，不进行任何修改
 	HonorLabels bool `yaml:"honor_labels,omitempty"`
 	// Indicator whether the scraped timestamps should be respected.
+	// 是否保持原始时间戳
 	HonorTimestamps bool `yaml:"honor_timestamps"`
 	// Indicator whether to track the staleness of the scraped timestamps.
+	// 是否跟踪时间戳的 staleness
 	TrackTimestampsStaleness bool `yaml:"track_timestamps_staleness"`
 	// A set of query parameters with which the target is scraped.
 	Params url.Values `yaml:"params,omitempty"`

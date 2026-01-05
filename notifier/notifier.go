@@ -58,6 +58,8 @@ const (
 
 var userAgent = fmt.Sprintf("Prometheus/%s", version.Version)
 
+// 告警通知结构体
+
 // Alert is a generic representation of an alert in the Prometheus eco-system.
 type Alert struct {
 	// Label value pairs for purpose of aggregation, matching, and disposition
@@ -108,6 +110,7 @@ func (a *Alert) ResolvedAt(ts time.Time) bool {
 // Manager is responsible for dispatching alert notifications to an
 // alert manager service.
 type Manager struct {
+	// 告警队列
 	queue []*Alert
 	opts  *Options
 
@@ -125,11 +128,15 @@ type Manager struct {
 
 // Options are the configurable parameters of a Handler.
 type Options struct {
-	QueueCapacity   int
+	// 告警队列容量
+	QueueCapacity int
+	// 是否在关闭时清空队列
 	DrainOnShutdown bool
-	ExternalLabels  labels.Labels
-	RelabelConfigs  []*relabel.Config
-	// Used for sending HTTP requests to the Alertmanager.
+	// 外部标签
+	ExternalLabels labels.Labels
+	// 标签重写配置
+	RelabelConfigs []*relabel.Config
+	// 用于发送HTTP请求到Alertmanager
 	Do func(ctx context.Context, client *http.Client, req *http.Request) (*http.Response, error)
 
 	Registerer prometheus.Registerer

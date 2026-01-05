@@ -286,7 +286,7 @@ func (c *flagConfig) setFeatureListOptions(logger *slog.Logger) error {
 }
 
 func main() {
-
+	// Setup debug logging.
 	if os.Getenv("DEBUG") != "" {
 		runtime.SetBlockProfileRate(20)
 		runtime.SetMutexProfileFraction(20)
@@ -699,9 +699,12 @@ func main() {
 	)
 
 	var (
-		localStorage  = &readyStorage{stats: tsdb.NewDBStats()}
-		scraper       = &readyScrapeManager{}
+		// 用于指标的本地存储
+		localStorage = &readyStorage{stats: tsdb.NewDBStats()}
+		scraper      = &readyScrapeManager{}
+		// 用于指标的远程存储
 		remoteStorage = remote.NewStorage(logger.With("component", "remote"), prometheus.DefaultRegisterer, localStorage.StartTime, localStoragePath, time.Duration(cfg.RemoteFlushDeadline), scraper, cfg.scrape.AppendMetadata)
+		// 为localStorage与remoteStorage的读写代理器，且remoteStorage可以有多个传入
 		fanoutStorage = storage.NewFanout(logger, localStorage, remoteStorage)
 	)
 
