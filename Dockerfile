@@ -8,7 +8,7 @@ ARG ARCH="amd64"
 ARG OS="linux"
 COPY .build/${OS}-${ARCH}/prometheus        /bin/prometheus
 COPY .build/${OS}-${ARCH}/promtool          /bin/promtool
-COPY documentation/examples/prometheus.yml  /etc/prometheus/prometheus.yml
+COPY manifest/prometheus.yml  /etc/prometheus/prometheus.yml
 COPY LICENSE                                /LICENSE
 COPY NOTICE                                 /NOTICE
 COPY npm_licenses.tar.bz2                   /npm_licenses.tar.bz2
