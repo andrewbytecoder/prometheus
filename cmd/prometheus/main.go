@@ -92,12 +92,11 @@ const klogv1DefaultPrefixLength = 53
 // This is a hack to support klogv1 without use of go-kit/log. It is inspired
 // by klog's upstream klogv1/v2 coexistence example:
 // https://github.com/kubernetes/klog/blob/main/examples/coexist_klog_v1_and_v2/coexist_klog_v1_and_v2.go
+// 使用桥接设计模式，将klogv1的日志输出重定向到klogv2
 type klogv1Writer struct{}
 
-// Write redirects klogv1 calls to klogv2.
-// This is a hack to support klogv1 without use of go-kit/log. It is inspired
-// by klog's upstream klogv1/v2 coexistence example:
-// https://github.com/kubernetes/klog/blob/main/examples/coexist_klog_v1_and_v2/coexist_klog_v1_and_v2.go
+// Write 方法实现了 io.Writer 接口，将 klog v1 的日志输出重定向到 klog v2
+// 这是一种支持 klog v1 和 v2 共存的 hack 方案
 func (kw klogv1Writer) Write(p []byte) (n int, err error) {
 	if len(p) < klogv1DefaultPrefixLength {
 		klogv2.InfoDepth(klogv1OutputCallDepth, string(p))
@@ -172,21 +171,21 @@ func agentOnlyFlag(app *kingpin.Application, name, help string) *kingpin.FlagCla
 }
 
 type flagConfig struct {
-	configFile string
+	configFile string // 配置文件路径
 
-	agentStoragePath   string
-	serverStoragePath  string
-	notifier           notifier.Options
-	forGracePeriod     model.Duration
-	outageTolerance    model.Duration
-	resendDelay        model.Duration
-	maxConcurrentEvals int64
+	agentStoragePath   string           // Agent 模式下的数据存储路径
+	serverStoragePath  string           // Server 模式下的数据存储路径
+	notifier           notifier.Options // 告警配置
+	forGracePeriod     model.Duration   // 告警恢复时间
+	outageTolerance    model.Duration   // 中断容忍时间
+	resendDelay        model.Duration   // 重新发送延迟时间
+	maxConcurrentEvals int64            //  最大并发评估次数
 	web                web.Options
 	scrape             scrape.Options
 	// 时序数据库配置
-	tsdb                        tsdbOptions
+	tsdb                        tsdbOptions // 时序数据库配置
 	agent                       agentOptions
-	lookbackDelta               model.Duration
+	lookbackDelta               model.Duration // 查询回溯时间
 	webTimeout                  model.Duration
 	queryTimeout                model.Duration
 	queryConcurrency            int
@@ -199,7 +198,7 @@ type flagConfig struct {
 
 	maxprocsEnable bool
 	memlimitEnable bool
-	memlimitRatio  float64
+	memlimitRatio  float64 // 内存限制比例
 
 	featureList []string
 	// These options are extracted from featureList
@@ -288,11 +287,14 @@ func (c *flagConfig) setFeatureListOptions(logger *slog.Logger) error {
 func main() {
 	// Setup debug logging.
 	if os.Getenv("DEBUG") != "" {
+		// Block profile rate
 		runtime.SetBlockProfileRate(20)
+		// Mutex profile rate
 		runtime.SetMutexProfileFraction(20)
 	}
 
 	// Unregister the default GoCollector, and reregister with our defaults.
+	//  注册定制化的 go collector指标
 	if prometheus.Unregister(collectors.NewGoCollector()) {
 		prometheus.MustRegister(
 			collectors.NewGoCollector(
@@ -306,6 +308,7 @@ func main() {
 	}
 
 	cfg := flagConfig{
+		// 指标 注册器
 		notifier: notifier.Options{
 			Registerer: prometheus.DefaultRegisterer,
 		},
@@ -316,25 +319,29 @@ func main() {
 		promslogConfig: promslog.Config{},
 	}
 
+	// 所有动作依赖 prometheus 可执行文件所在的文件夹为依据
 	a := kingpin.New(filepath.Base(os.Args[0]), "The Prometheus monitoring server").UsageWriter(os.Stdout)
 
 	a.Version(version.Print(appName))
-
+	// 使用 -h 作为帮助命令
 	a.HelpFlag.Short('h')
-
+	// 使用 --config.file执行配置文件
 	a.Flag("config.file", "Prometheus configuration file path.").
 		Default("prometheus.yml").StringVar(&cfg.configFile)
-
+	// 配置自动加载时间间隔
 	a.Flag("config.auto-reload-interval", "Specifies the interval for checking and automatically reloading the Prometheus configuration file upon detecting changes.").
 		Default("30s").SetValue(&cfg.autoReloadInterval)
 
+	// web 监听端口
 	a.Flag("web.listen-address", "Address to listen on for UI, API, and telemetry. Can be repeated.").
 		Default("0.0.0.0:9090").StringsVar(&cfg.web.ListenAddresses)
-
+	// 配置 go 使用最大线程数量
 	a.Flag("auto-gomaxprocs", "Automatically set GOMAXPROCS to match Linux container CPU quota").
 		Default("true").BoolVar(&cfg.maxprocsEnable)
+	// go 内存使用限制
 	a.Flag("auto-gomemlimit", "Automatically set GOMEMLIMIT to match Linux container or system memory limit").
 		Default("true").BoolVar(&cfg.memlimitEnable)
+	// 内存使用限制比例
 	a.Flag("auto-gomemlimit.ratio", "The ratio of reserved GOMEMLIMIT memory to the detected maximum container or system memory").
 		Default("0.9").FloatVar(&cfg.memlimitRatio)
 
@@ -567,6 +574,7 @@ func main() {
 		os.Exit(3)
 	}
 
+	// Check ratio 内存使用率 必须限制到 [0.0, 1.0]
 	if cfg.memlimitRatio <= 0.0 || cfg.memlimitRatio > 1.0 {
 		fmt.Fprintf(os.Stderr, "--auto-gomemlimit.ratio must be greater than 0 and less than or equal to 1.")
 		os.Exit(1)
@@ -777,6 +785,7 @@ func main() {
 		}
 	}
 
+	// 是否启用内存限制，如果限制会使用限制的指标进行 gc
 	if cfg.memlimitEnable {
 		if _, err := memlimit.SetGoMemLimitWithOpts(
 			memlimit.WithRatio(cfg.memlimitRatio),
@@ -792,182 +801,213 @@ func main() {
 	}
 
 	if !agentMode {
+		// 创建PromQL查询引擎的配置选项
 		opts := promql.EngineOpts{
-			Logger:                   logger.With("component", "query engine"),
-			Reg:                      prometheus.DefaultRegisterer,
-			MaxSamples:               cfg.queryMaxSamples,
-			Timeout:                  time.Duration(cfg.queryTimeout),
-			ActiveQueryTracker:       promql.NewActiveQueryTracker(localStoragePath, cfg.queryConcurrency, logger.With("component", "activeQueryTracker")),
-			LookbackDelta:            time.Duration(cfg.lookbackDelta),
+			// 查询引擎使用的日志记录器
+			Logger: logger.With("component", "query engine"),
+			// 指标注册器，用于注册查询引擎相关的监控指标
+			Reg: prometheus.DefaultRegisterer,
+			// 单个查询可加载的最大样本数，防止查询消耗过多内存
+			MaxSamples: cfg.queryMaxSamples,
+			// 查询超时时间，超过此时间查询会被中断
+			Timeout: time.Duration(cfg.queryTimeout),
+			// 活跃查询跟踪器，用于跟踪当前正在执行的查询
+			ActiveQueryTracker: promql.NewActiveQueryTracker(localStoragePath, cfg.queryConcurrency, logger.With("component", "activeQueryTracker")),
+			// 查询回溯时间，在评估表达式时，查询历史数据的时间范围
+			LookbackDelta: time.Duration(cfg.lookbackDelta),
+			// 子查询步长间隔函数，用于确定子查询的时间步长
 			NoStepSubqueryIntervalFn: noStepSubqueryInterval.Get,
-			// EnableAtModifier and EnableNegativeOffset have to be
-			// always on for regular PromQL as of Prometheus v2.33.
-			EnableAtModifier:         true,
-			EnableNegativeOffset:     true,
-			EnablePerStepStats:       cfg.enablePerStepStats,
+			// EnableAtModifier 和 EnableNegativeOffset 在Prometheus v2.33之后必须始终开启
+			// 允许在PromQL查询中使用@修饰符指定时间戳
+			EnableAtModifier: true,
+			// 允许在PromQL查询中使用负偏移量
+			EnableNegativeOffset: true,
+			// 是否启用每步统计功能，用于查询性能分析
+			EnablePerStepStats: cfg.enablePerStepStats,
+			// 是否启用延迟名称移除功能，优化查询性能
 			EnableDelayedNameRemoval: cfg.promqlEnableDelayedNameRemoval,
 		}
-
+		// 创建PromQL查询引擎
 		queryEngine = promql.NewEngine(opts)
-
 		ruleManager = rules.NewManager(&rules.ManagerOptions{
-			Appendable:             fanoutStorage,
-			Queryable:              localStorage,
-			QueryFunc:              rules.EngineQueryFunc(queryEngine, fanoutStorage),
-			NotifyFunc:             rules.SendAlerts(notifierManager, cfg.web.ExternalURL.String()),
-			Context:                ctxRule,
-			ExternalURL:            cfg.web.ExternalURL,
-			Registerer:             prometheus.DefaultRegisterer,
-			Logger:                 logger.With("component", "rule manager"),
-			OutageTolerance:        time.Duration(cfg.outageTolerance),
-			ForGracePeriod:         time.Duration(cfg.forGracePeriod),
-			ResendDelay:            time.Duration(cfg.resendDelay),
-			MaxConcurrentEvals:     cfg.maxConcurrentEvals,
+			// 可追加存储接口，用于存储规则评估结果
+			Appendable: fanoutStorage,
+			// 可查询存储接口，用于查询历史数据
+			Queryable: localStorage,
+			// 查询函数，将查询引擎和存储结合使用
+			QueryFunc: rules.EngineQueryFunc(queryEngine, fanoutStorage),
+			// 通知函数，用于发送告警到通知管理器
+			NotifyFunc: rules.SendAlerts(notifierManager, cfg.web.ExternalURL.String()),
+			// 上下文对象
+			Context: ctxRule,
+			// 外部URL，用于构建告警回调链接
+			ExternalURL: cfg.web.ExternalURL,
+			// 指标注册器，用于注册规则管理器相关指标
+			Registerer: prometheus.DefaultRegisterer,
+			// 日志记录器
+			Logger: logger.With("component", "rule manager"),
+			// 故障容忍时间，当Prometheus中断后，多久内恢复告警状态
+			OutageTolerance: time.Duration(cfg.outageTolerance),
+			// "for"状态的宽限期，用于控制告警恢复的时间间隔
+			ForGracePeriod: time.Duration(cfg.forGracePeriod),
+			// 重新发送延迟，控制告警重新发送的频率
+			ResendDelay: time.Duration(cfg.resendDelay),
+			// 最大并发评估数，控制同时运行的规则评估数量
+			MaxConcurrentEvals: cfg.maxConcurrentEvals,
+			// 是否启用并发评估
 			ConcurrentEvalsEnabled: cfg.enableConcurrentRuleEval,
+			// 默认规则查询偏移量函数
 			DefaultRuleQueryOffset: func() time.Duration {
 				return time.Duration(cfgFile.GlobalConfig.RuleQueryOffset)
 			},
 		})
-	}
 
+	}
+	// 设置抓取管理器到就绪状态管理器
 	scraper.Set(scrapeManager)
 
-	cfg.web.Context = ctxWeb
-	cfg.web.TSDBRetentionDuration = cfg.tsdb.RetentionDuration
-	cfg.web.TSDBMaxBytes = cfg.tsdb.MaxBytes
-	cfg.web.TSDBDir = localStoragePath
-	cfg.web.LocalStorage = localStorage
-	cfg.web.Storage = fanoutStorage
-	cfg.web.ExemplarStorage = localStorage
-	cfg.web.QueryEngine = queryEngine
-	cfg.web.ScrapeManager = scrapeManager
-	cfg.web.RuleManager = ruleManager
-	cfg.web.Notifier = notifierManager
-	cfg.web.LookbackDelta = time.Duration(cfg.lookbackDelta)
-	cfg.web.IsAgent = agentMode
-	cfg.web.AppName = modeAppName
+	// 配置Web处理器的各种参数
+	cfg.web.Context = ctxWeb                                   // Web服务的上下文
+	cfg.web.TSDBRetentionDuration = cfg.tsdb.RetentionDuration // TSDB数据保留时长
+	cfg.web.TSDBMaxBytes = cfg.tsdb.MaxBytes                   // TSDB最大存储字节数
+	cfg.web.TSDBDir = localStoragePath                         // TSDB数据存储目录
+	cfg.web.LocalStorage = localStorage                        // 本地存储实例
+	cfg.web.Storage = fanoutStorage                            // 扇出存储实例（本地+远程）
+	cfg.web.ExemplarStorage = localStorage                     // 样本存储实例
+	cfg.web.QueryEngine = queryEngine                          // PromQL查询引擎实例
+	cfg.web.ScrapeManager = scrapeManager                      // 抓取管理器实例
+	cfg.web.RuleManager = ruleManager                          // 规则管理器实例
+	cfg.web.Notifier = notifierManager                         // 通知管理器实例
+	cfg.web.LookbackDelta = time.Duration(cfg.lookbackDelta)   // 查询回溯时间
+	cfg.web.IsAgent = agentMode                                // 是否为Agent模式
+	cfg.web.AppName = modeAppName                              // 应用名称
 
+	// 设置版本信息
 	cfg.web.Version = &web.PrometheusVersion{
-		Version:   version.Version,
-		Revision:  version.Revision,
-		Branch:    version.Branch,
-		BuildUser: version.BuildUser,
-		BuildDate: version.BuildDate,
-		GoVersion: version.GoVersion,
+		Version:   version.Version,   // Prometheus版本号
+		Revision:  version.Revision,  // Git提交修订号
+		Branch:    version.Branch,    // Git分支
+		BuildUser: version.BuildUser, // 构建用户
+		BuildDate: version.BuildDate, // 构建日期
+		GoVersion: version.GoVersion, // Go版本
 	}
 
+	// 构建命令行参数映射表
 	cfg.web.Flags = map[string]string{}
 
-	// Exclude kingpin default flags to expose only Prometheus ones.
+	// 排除kingpin默认参数，只暴露Prometheus特有的参数
 	boilerplateFlags := kingpin.New("", "").Version("")
 	for _, f := range a.Model().Flags {
+		// 跳过默认的kingpin参数
 		if boilerplateFlags.GetFlag(f.Name) != nil {
 			continue
 		}
-
+		// 添加Prometheus特有参数到Web界面显示
 		cfg.web.Flags[f.Name] = f.Value.String()
 	}
-
-	// Depends on cfg.web.ScrapeManager so needs to be after cfg.web.ScrapeManager = scrapeManager.
+	// 创建Web处理器，依赖于scrapeManager，所以必须在cfg.web.ScrapeManager = scrapeManager之后
 	webHandler := web.New(logger.With("component", "web"), &cfg.web)
 
-	// Monitor outgoing connections on default transport with conntrack.
+	// 使用conntrack监控默认传输的传出连接
 	http.DefaultTransport.(*http.Transport).DialContext = conntrack.NewDialContextFunc(
-		conntrack.DialWithTracing(),
+		conntrack.DialWithTracing(), // 启用追踪功能
 	)
 
-	// This is passed to ruleManager.Update().
+	// 传递给ruleManager.Update()方法使用
 	externalURL := cfg.web.ExternalURL.String()
 
+	// 定义配置重载器列表，每个组件都有自己的配置重载逻辑
 	reloaders := []reloader{
 		{
-			name:     "db_storage",
-			reloader: localStorage.ApplyConfig,
+			name:     "db_storage",             // 数据库存储组件
+			reloader: localStorage.ApplyConfig, // 应用本地存储配置
 		}, {
-			name:     "remote_storage",
-			reloader: remoteStorage.ApplyConfig,
+			name:     "remote_storage",          // 远程存储组件
+			reloader: remoteStorage.ApplyConfig, // 应用远程存储配置
 		}, {
-			name:     "web_handler",
-			reloader: webHandler.ApplyConfig,
+			name:     "web_handler",          // Web处理器组件
+			reloader: webHandler.ApplyConfig, // 应用Web处理器配置
 		}, {
-			name: "query_engine",
+			name: "query_engine", // 查询引擎组件
 			reloader: func(cfg *config.Config) error {
 				if agentMode {
-					// No-op in Agent mode.
+					// Agent模式下不执行任何操作
 					return nil
 				}
 
 				if cfg.GlobalConfig.QueryLogFile == "" {
-					queryEngine.SetQueryLogger(nil)
+					queryEngine.SetQueryLogger(nil) // 清除查询日志记录器
 					return nil
 				}
 
+				// 创建JSON格式的查询日志记录器
 				l, err := logging.NewJSONFileLogger(cfg.GlobalConfig.QueryLogFile)
 				if err != nil {
 					return err
 				}
-				queryEngine.SetQueryLogger(l)
+				queryEngine.SetQueryLogger(l) // 设置查询日志记录器
 				return nil
 			},
 		}, {
-			// The Scrape and notifier managers need to reload before the Discovery manager as
-			// they need to read the most updated config when receiving the new targets list.
-			name:     "scrape",
-			reloader: scrapeManager.ApplyConfig,
+			// 抓取和通知管理器需要在发现管理器之前重载，
+			// 因为它们在接收新目标列表时需要读取最新配置
+			name:     "scrape",                  // 抓取管理器组件
+			reloader: scrapeManager.ApplyConfig, // 应用抓取管理器配置
 		}, {
-			name: "scrape_sd",
+			name: "scrape_sd", // 抓取服务发现组件
 			reloader: func(cfg *config.Config) error {
-				c := make(map[string]discovery.Configs)
-				scfgs, err := cfg.GetScrapeConfigs()
+				c := make(map[string]discovery.Configs) // 创建服务发现配置映射
+				scfgs, err := cfg.GetScrapeConfigs()    // 获取抓取配置
 				if err != nil {
 					return err
 				}
 				for _, v := range scfgs {
-					c[v.JobName] = v.ServiceDiscoveryConfigs
+					c[v.JobName] = v.ServiceDiscoveryConfigs // 按作业名称映射服务发现配置
 				}
-				return discoveryManagerScrape.ApplyConfig(c)
+				return discoveryManagerScrape.ApplyConfig(c) // 应用抓取服务发现配置
 			},
 		}, {
-			name:     "notify",
-			reloader: notifierManager.ApplyConfig,
+			name:     "notify",                    // 通知管理器组件
+			reloader: notifierManager.ApplyConfig, // 应用通知管理器配置
 		}, {
-			name: "notify_sd",
+			name: "notify_sd", // 通知服务发现组件
 			reloader: func(cfg *config.Config) error {
-				c := make(map[string]discovery.Configs)
+				c := make(map[string]discovery.Configs) // 创建服务发现配置映射
 				for k, v := range cfg.AlertingConfig.AlertmanagerConfigs.ToMap() {
-					c[k] = v.ServiceDiscoveryConfigs
+					c[k] = v.ServiceDiscoveryConfigs // 映射Alertmanager服务发现配置
 				}
-				return discoveryManagerNotify.ApplyConfig(c)
+				return discoveryManagerNotify.ApplyConfig(c) // 应用通知服务发现配置
 			},
 		}, {
-			name: "rules",
+			name: "rules", // 规则管理器组件
 			reloader: func(cfg *config.Config) error {
 				if agentMode {
-					// No-op in Agent mode
+					// Agent模式下不执行任何操作
 					return nil
 				}
 
-				// Get all rule files matching the configuration paths.
+				// 获取匹配配置路径的所有规则文件
 				var files []string
 				for _, pat := range cfg.RuleFiles {
-					fs, err := filepath.Glob(pat)
+					fs, err := filepath.Glob(pat) // 查找匹配的文件
 					if err != nil {
-						// The only error can be a bad pattern.
+						// 唯一的错误可能是错误的模式
 						return fmt.Errorf("error retrieving rule files for %s: %w", pat, err)
 					}
-					files = append(files, fs...)
+					files = append(files, fs...) // 添加找到的文件到列表
 				}
+				// 更新规则管理器
 				return ruleManager.Update(
-					time.Duration(cfg.GlobalConfig.EvaluationInterval),
-					files,
-					cfg.GlobalConfig.ExternalLabels,
-					externalURL,
-					nil,
+					time.Duration(cfg.GlobalConfig.EvaluationInterval), // 评估间隔
+					files,                           // 规则文件列表
+					cfg.GlobalConfig.ExternalLabels, // 外部标签
+					externalURL,                     // 外部URL
+					nil,                             // 附加标签
 				)
 			},
 		}, {
-			name:     "tracing",
-			reloader: tracingManager.ApplyConfig,
+			name:     "tracing",                  // 追踪组件
+			reloader: tracingManager.ApplyConfig, // 应用追踪管理器配置
 		},
 	}
 
@@ -1790,27 +1830,27 @@ func (rm *readyScrapeManager) Get() (*scrape.Manager, error) {
 // tsdbOptions is tsdb.Option version with defined units.
 // This is required as tsdb.Option fields are unit agnostic (time).
 type tsdbOptions struct {
-	WALSegmentSize                 units.Base2Bytes
-	MaxBlockChunkSegmentSize       units.Base2Bytes
-	RetentionDuration              model.Duration
-	MaxBytes                       units.Base2Bytes
-	NoLockfile                     bool
-	WALCompression                 bool
-	WALCompressionType             string
-	HeadChunksWriteQueueSize       int
-	SamplesPerChunk                int
-	StripeSize                     int
-	MinBlockDuration               model.Duration
-	MaxBlockDuration               model.Duration
-	OutOfOrderTimeWindow           int64
-	EnableExemplarStorage          bool
-	MaxExemplars                   int64
-	EnableMemorySnapshotOnShutdown bool
-	EnableNativeHistograms         bool
-	EnableDelayedCompaction        bool
-	CompactionDelayMaxPercent      int
-	EnableOverlappingCompaction    bool
-	EnableOOONativeHistograms      bool
+	WALSegmentSize                 units.Base2Bytes // WAL段文件大小，单位转换为二进制字节
+	MaxBlockChunkSegmentSize       units.Base2Bytes // 单个块中段的最大大小，单位转换为二进制字节
+	RetentionDuration              model.Duration   // 数据保留时间，单位转换为模型持续时间
+	MaxBytes                       units.Base2Bytes // 块的最大字节数，单位转换为二进制字节
+	NoLockfile                     bool             // 是否不在数据目录创建锁文件
+	WALCompression                 bool             // 是否压缩WAL（预写日志）
+	WALCompressionType             string           // WAL压缩算法类型
+	HeadChunksWriteQueueSize       int              // 头部块写入磁盘的队列大小
+	SamplesPerChunk                int              // 每个块的目标样本数
+	StripeSize                     int              // 分片大小
+	MinBlockDuration               model.Duration   // 数据块持久化前的最小持续时间
+	MaxBlockDuration               model.Duration   // 压缩块可能跨越的最大持续时间
+	OutOfOrderTimeWindow           int64            // 乱序时间窗口（毫秒）
+	EnableExemplarStorage          bool             // 是否启用样本存储
+	MaxExemplars                   int64            // 最大样本数
+	EnableMemorySnapshotOnShutdown bool             // 关机时是否启用内存快照
+	EnableNativeHistograms         bool             // 是否启用原生直方图
+	EnableDelayedCompaction        bool             // 是否启用延迟压缩
+	CompactionDelayMaxPercent      int              // 压缩延迟的最大百分比
+	EnableOverlappingCompaction    bool             // 是否允许重叠压缩
+	EnableOOONativeHistograms      bool             // 是否启用乱序原生直方图
 }
 
 func (opts tsdbOptions) ToTSDBOptions() tsdb.Options {
