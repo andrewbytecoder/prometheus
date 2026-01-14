@@ -171,6 +171,7 @@ func agentOnlyFlag(app *kingpin.Application, name, help string) *kingpin.FlagCla
 }
 
 type flagConfig struct {
+	// 存储config file 路径，通常是prometheus.yml
 	configFile string // 配置文件路径
 
 	agentStoragePath   string           // Agent 模式下的数据存储路径
@@ -599,7 +600,9 @@ func main() {
 
 	// Throw error for invalid config before starting other components.
 	var cfgFile *config.Config
+	// 加载配置
 	if cfgFile, err = config.LoadFile(cfg.configFile, agentMode, promslog.NewNopLogger()); err != nil {
+		// 添加工作目录获取绝对路径
 		absPath, pathErr := filepath.Abs(cfg.configFile)
 		if pathErr != nil {
 			absPath = cfg.configFile

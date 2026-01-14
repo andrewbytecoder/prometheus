@@ -124,6 +124,7 @@ func Load(s string, logger *slog.Logger) (*Config, error) {
 // LoadFile parses and validates the given YAML file into a read-only Config.
 // Callers should never write to or shallow copy the returned Config.
 func LoadFile(filename string, agentMode bool, logger *slog.Logger) (*Config, error) {
+	// 读取文件配置
 	content, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
@@ -259,14 +260,20 @@ var (
 
 // Config is the top-level configuration for Prometheus's config files.
 type Config struct {
-	GlobalConfig      GlobalConfig    `yaml:"global"`
-	Runtime           RuntimeConfig   `yaml:"runtime,omitempty"`
-	AlertingConfig    AlertingConfig  `yaml:"alerting,omitempty"`
-	RuleFiles         []string        `yaml:"rule_files,omitempty"`
+	// 全局配置
+	GlobalConfig GlobalConfig `yaml:"global"`
+	// GOGC 配置
+	Runtime RuntimeConfig `yaml:"runtime,omitempty"`
+	// 报警配置
+	AlertingConfig AlertingConfig `yaml:"alerting,omitempty"`
+	RuleFiles      []string       `yaml:"rule_files,omitempty"`
+	// 目标抓取配置文件
 	ScrapeConfigFiles []string        `yaml:"scrape_config_files,omitempty"`
 	ScrapeConfigs     []*ScrapeConfig `yaml:"scrape_configs,omitempty"`
-	StorageConfig     StorageConfig   `yaml:"storage,omitempty"`
-	TracingConfig     TracingConfig   `yaml:"tracing,omitempty"`
+
+	// 存储配置
+	StorageConfig StorageConfig `yaml:"storage,omitempty"`
+	TracingConfig TracingConfig `yaml:"tracing,omitempty"`
 
 	RemoteWriteConfigs []*RemoteWriteConfig `yaml:"remote_write,omitempty"`
 	RemoteReadConfigs  []*RemoteReadConfig  `yaml:"remote_read,omitempty"`
@@ -439,6 +446,7 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 // objects.
 type GlobalConfig struct {
 	// How frequently to scrape targets by default.
+	// 抓取的时间间隔
 	ScrapeInterval model.Duration `yaml:"scrape_interval,omitempty"`
 	// The default timeout when scraping targets.
 	ScrapeTimeout model.Duration `yaml:"scrape_timeout,omitempty"`
