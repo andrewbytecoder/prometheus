@@ -270,8 +270,9 @@ type Options struct {
 	NotificationsSub      func() (<-chan notifications.Notification, func(), bool)
 	Flags                 map[string]string
 
-	ListenAddresses            []string
-	CORSOrigin                 *regexp.Regexp
+	ListenAddresses []string
+	CORSOrigin      *regexp.Regexp
+	// 读取超时时间
 	ReadTimeout                time.Duration
 	MaxConnections             int
 	ExternalURL                *url.URL

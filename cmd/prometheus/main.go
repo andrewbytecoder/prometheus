@@ -121,7 +121,7 @@ func (kw klogv1Writer) Write(p []byte) (n int, err error) {
 
 var (
 	appName = "prometheus"
-
+	// 收集配置成功的状态和配置时间
 	configSuccess = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "prometheus_config_last_reload_successful",
 		Help: "Whether the last configuration reload attempt was successful.",
@@ -329,7 +329,7 @@ func main() {
 	// 使用 --config.file执行配置文件
 	a.Flag("config.file", "Prometheus configuration file path.").
 		Default("prometheus.yml").StringVar(&cfg.configFile)
-	// 配置自动加载时间间隔
+	// 配置自动配置加载时间间隔，如果没有配置默认30s自动加载配置
 	a.Flag("config.auto-reload-interval", "Specifies the interval for checking and automatically reloading the Prometheus configuration file upon detecting changes.").
 		Default("30s").SetValue(&cfg.autoReloadInterval)
 
@@ -355,6 +355,7 @@ func main() {
 		"Maximum duration before timing out read of the request, and closing idle connections.").
 		Default("5m").SetValue(&cfg.webTimeout)
 
+	// 配置最大并发林执行任务数量，这里使用netconnlimit工具进行管理
 	a.Flag("web.max-connections", "Maximum number of simultaneous connections across all listeners.").
 		Default("512").IntVar(&cfg.web.MaxConnections)
 
@@ -932,6 +933,7 @@ func main() {
 			reloader: webHandler.ApplyConfig, // 应用Web处理器配置
 		}, {
 			name: "query_engine", // 查询引擎组件
+			// 创建PromQL查询引擎, 查询日志
 			reloader: func(cfg *config.Config) error {
 				if agentMode {
 					// Agent模式下不执行任何操作
@@ -1032,6 +1034,7 @@ func main() {
 		C: make(chan struct{}),
 	}
 	reloadReady.Close = func() {
+		// 可能会调用很多次，这里保证只调用一次
 		reloadReady.once.Do(func() {
 			close(reloadReady.C)
 		})
@@ -1195,6 +1198,8 @@ func main() {
 				for {
 					select {
 					case <-hup:
+						//当接收到 sighup信号的时候对配置文件进行重新加载
+						//可以根据这个设计一套配置自动加载功能
 						if err := reloadConfig(cfg.configFile, cfg.tsdb.EnableExemplarStorage, logger, noStepSubqueryInterval, callback, reloaders...); err != nil {
 							logger.Error("Error reloading config", "err", err)
 						} else if cfg.enableAutoReload {
@@ -1217,6 +1222,7 @@ func main() {
 							}
 						}
 					case <-time.Tick(time.Duration(cfg.autoReloadInterval)):
+						// 只有使能了自动加载功能才进行自动配置加载
 						if !cfg.enableAutoReload {
 							continue
 						}
@@ -1495,6 +1501,7 @@ func reloadConfig(filename string, enableExemplarStorage bool, logger *slog.Logg
 
 	defer func() {
 		if err == nil {
+			// 更新指标数据， prometheus中能查看配置文件更新时间和更新状态以及更新耗时
 			configSuccess.Set(1)
 			configSuccessTime.SetToCurrentTime()
 			callback(true)
@@ -1504,6 +1511,7 @@ func reloadConfig(filename string, enableExemplarStorage bool, logger *slog.Logg
 		}
 	}()
 
+	// 将新配置从配置文件中加载出来
 	conf, err := config.LoadFile(filename, agentMode, logger)
 	if err != nil {
 		return fmt.Errorf("couldn't load configuration (--config.file=%q): %w", filename, err)
@@ -1522,12 +1530,12 @@ func reloadConfig(filename string, enableExemplarStorage bool, logger *slog.Logg
 			logger.Error("Failed to apply configuration", "err", err)
 			failed = true
 		}
-		timingsLogger = timingsLogger.With((rl.name), time.Since(rstart))
+		timingsLogger = timingsLogger.With(rl.name, time.Since(rstart))
 	}
 	if failed {
 		return fmt.Errorf("one or more errors occurred while applying the new configuration (--config.file=%q)", filename)
 	}
-
+	// 如果GC配置发生改变，这里对GC进行修改
 	oldGoGC := debug.SetGCPercent(conf.Runtime.GoGC)
 	if oldGoGC != conf.Runtime.GoGC {
 		logger.Info("updated GOGC", "old", oldGoGC, "new", conf.Runtime.GoGC)

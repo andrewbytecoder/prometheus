@@ -79,7 +79,7 @@ func Load(s string, logger *slog.Logger) (*Config, error) {
 	// never called. We thus have to set the DefaultConfig at the entry
 	// point as well.
 	*cfg = DefaultConfig
-
+	// 如果配置文件中有任何不支持的配置将导致配置加载失败
 	err := yaml.UnmarshalStrict([]byte(s), cfg)
 	if err != nil {
 		return nil, err
@@ -456,6 +456,7 @@ type GlobalConfig struct {
 	// OpenMetricsText1.0.0, PrometheusText0.0.4.
 	ScrapeProtocols []ScrapeProtocol `yaml:"scrape_protocols,omitempty"`
 	// How frequently to evaluate rules by default.
+	// 添加 rules评估的时间间隔
 	EvaluationInterval model.Duration `yaml:"evaluation_interval,omitempty"`
 	// Offset the rule evaluation timestamp of this particular group by the specified duration into the past to ensure the underlying metrics have been received.
 	RuleQueryOffset model.Duration `yaml:"rule_query_offset,omitempty"`
