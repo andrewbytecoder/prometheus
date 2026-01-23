@@ -116,6 +116,7 @@ type Manager struct {
 
 	metrics *alertMetrics
 
+	// 作为信号量，当有新的告警的时候会发送信号通知处理线程进行处理
 	more chan struct{}
 	mtx  sync.RWMutex
 
@@ -442,6 +443,7 @@ func (n *Manager) Send(alerts ...*Alert) {
 	n.mtx.Lock()
 	defer n.mtx.Unlock()
 
+	// 对报警内容进行重新打标签
 	alerts = relabelAlerts(n.opts.RelabelConfigs, n.opts.ExternalLabels, alerts)
 	if len(alerts) == 0 {
 		return
@@ -449,6 +451,7 @@ func (n *Manager) Send(alerts ...*Alert) {
 
 	// Queue capacity should be significantly larger than a single alert
 	// batch could be.
+	// 本次发送的报警数量大于队列容量，则丢弃部分报警信息
 	if d := len(alerts) - n.opts.QueueCapacity; d > 0 {
 		alerts = alerts[d:]
 
@@ -458,6 +461,7 @@ func (n *Manager) Send(alerts ...*Alert) {
 
 	// If the queue is full, remove the oldest alerts in favor
 	// of newer ones.
+	// 队列已满，则丢弃最老的报警信息
 	if d := (len(n.queue) + len(alerts)) - n.opts.QueueCapacity; d > 0 {
 		n.queue = n.queue[d:]
 
@@ -497,6 +501,8 @@ func (n *Manager) setMore() {
 	// If we cannot send on the channel, it means the signal already exists
 	// and has not been consumed yet.
 	select {
+	// 不用担心丢失，如果上次发送的没有接收，这里会进行阻塞，知道上次护理完成
+	//	 但是可能乱序
 	case n.more <- struct{}{}:
 	default:
 	}

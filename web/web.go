@@ -266,13 +266,15 @@ type Options struct {
 	RuleManager           *rules.Manager
 	Notifier              *notifier.Manager
 	Version               *PrometheusVersion
-	NotificationsGetter   func() []notifications.Notification
-	NotificationsSub      func() (<-chan notifications.Notification, func(), bool)
-	Flags                 map[string]string
+	// 用来获取当前通知信息的一个副本
+	NotificationsGetter func() []notifications.Notification
+	// 通知信息订阅
+	NotificationsSub func() (<-chan notifications.Notification, func(), bool)
+	Flags            map[string]string
 
 	ListenAddresses []string
 	CORSOrigin      *regexp.Regexp
-	// 读取超时时间
+	// 读取超时时间，会在创建服务的时候透传给http server
 	ReadTimeout                time.Duration
 	MaxConnections             int
 	ExternalURL                *url.URL
@@ -517,6 +519,7 @@ func New(logger *slog.Logger, o *Options) *Handler {
 		router.Post("/-/reload", h.reload)
 		router.Put("/-/reload", h.reload)
 	} else {
+		// Return 403 Forbidden for the lifecycle APIs.
 		forbiddenAPINotEnabled := func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusForbidden)
 			w.Write([]byte("Lifecycle API is not enabled."))
@@ -637,6 +640,8 @@ func (h *Handler) Reload() <-chan chan error {
 // Listeners creates the TCP listeners for web requests.
 func (h *Handler) Listeners() ([]net.Listener, error) {
 	var listeners []net.Listener
+	// 默认支持 512 个连接同时存在，防止出现 timeout
+	// 是所有连接在一起只支持 512 个连接
 	sem := netconnlimit.NewSharedSemaphore(h.options.MaxConnections)
 	for _, address := range h.options.ListenAddresses {
 		listener, err := h.Listener(address, sem)

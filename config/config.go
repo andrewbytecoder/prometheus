@@ -78,6 +78,7 @@ func Load(s string, logger *slog.Logger) (*Config, error) {
 	// If the entire config body is empty the UnmarshalYAML method is
 	// never called. We thus have to set the DefaultConfig at the entry
 	// point as well.
+	// 先将配置设置为默认配置
 	*cfg = DefaultConfig
 	// 如果配置文件中有任何不支持的配置将导致配置加载失败
 	err := yaml.UnmarshalStrict([]byte(s), cfg)
@@ -86,7 +87,9 @@ func Load(s string, logger *slog.Logger) (*Config, error) {
 	}
 
 	b := labels.NewScratchBuilder(0)
+	// 遍历设置全局标签
 	cfg.GlobalConfig.ExternalLabels.Range(func(v labels.Label) {
+		// 如果全局标签中有需要进行 relable 处理的这里进行relabel处理
 		newV := os.Expand(v.Value, func(s string) string {
 			if s == "$" {
 				return "$"
@@ -465,6 +468,7 @@ type GlobalConfig struct {
 	// File to which scrape failures are logged.
 	ScrapeFailureLogFile string `yaml:"scrape_failure_log_file,omitempty"`
 	// The labels to add to any timeseries that this Prometheus instance scrapes.
+	// 这里配置的labels会添加到所有抓取的指标中
 	ExternalLabels labels.Labels `yaml:"external_labels,omitempty"`
 	// An uncompressed response body larger than this many bytes will cause the
 	// scrape to fail. 0 means no limit.

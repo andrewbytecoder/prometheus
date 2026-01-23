@@ -134,6 +134,7 @@ var (
 	defaultRetentionString   = "15d"
 	defaultRetentionDuration model.Duration
 
+	// agent 模式，只采集指标，不进行数据写入，不支持数据查询
 	agentMode                       bool
 	agentOnlyFlags, serverOnlyFlags []string
 )
@@ -199,14 +200,15 @@ type flagConfig struct {
 
 	maxprocsEnable bool
 	memlimitEnable bool
-	memlimitRatio  float64 // 内存限制比例
+
+	memlimitRatio float64 // 内存限制比例
 
 	featureList []string
 	// These options are extracted from featureList
 	// for ease of use.
 	enablePerStepStats       bool
 	enableConcurrentRuleEval bool
-
+	// prometheus 的url
 	prometheusURL   string
 	corsRegexString string
 
@@ -366,6 +368,7 @@ func main() {
 		"The URL under which Prometheus is externally reachable (for example, if Prometheus is served via a reverse proxy). Used for generating relative and absolute links back to Prometheus itself. If the URL has a path portion, it will be used to prefix all HTTP endpoints served by Prometheus. If omitted, relevant URL components will be derived automatically.").
 		PlaceHolder("<URL>").StringVar(&cfg.prometheusURL)
 
+	// 路径添加前缀
 	a.Flag("web.route-prefix",
 		"Prefix for the internal routes of web endpoints. Defaults to path of --web.external-url.").
 		PlaceHolder("<path>").StringVar(&cfg.web.RoutePrefix)
@@ -373,9 +376,10 @@ func main() {
 	a.Flag("web.user-assets", "Path to static asset directory, available at /user.").
 		PlaceHolder("<path>").StringVar(&cfg.web.UserAssetsPath)
 
+	//  是否支持 quit 和 reload
 	a.Flag("web.enable-lifecycle", "Enable shutdown and reload via HTTP request.").
 		Default("false").BoolVar(&cfg.web.EnableLifecycle)
-
+	// 开启tsdb的 admin 权限
 	a.Flag("web.enable-admin-api", "Enable API endpoints for admin control actions.").
 		Default("false").BoolVar(&cfg.web.EnableAdminAPI)
 
@@ -387,13 +391,14 @@ func main() {
 	supportedRemoteWriteProtoMsgs := config.RemoteWriteProtoMsgs{config.RemoteWriteProtoMsgV1, config.RemoteWriteProtoMsgV2}
 	a.Flag("web.remote-write-receiver.accepted-protobuf-messages", fmt.Sprintf("List of the remote write protobuf messages to accept when receiving the remote writes. Supported values: %v", supportedRemoteWriteProtoMsgs.String())).
 		Default(supportedRemoteWriteProtoMsgs.Strings()...).SetValue(rwProtoMsgFlagValue(&cfg.web.AcceptRemoteWriteProtoMsgs))
-
+	// 是否启用一个otlp 接收端，该配置项是一个实验性的功能配置项
+	// 将 otlp 数据接收，并将其写入到本地
 	a.Flag("web.enable-otlp-receiver", "Enable API endpoint accepting OTLP write requests.").
 		Default("false").BoolVar(&cfg.web.EnableOTLPWriteReceiver)
 
 	a.Flag("web.console.templates", "Path to the console template directory, available at /consoles.").
 		Default("consoles").StringVar(&cfg.web.ConsoleTemplatesPath)
-
+	// 配置控制台模板路径
 	a.Flag("web.console.libraries", "Path to the console library directory.").
 		Default("console_libraries").StringVar(&cfg.web.ConsoleLibrariesPath)
 
@@ -403,48 +408,56 @@ func main() {
 	a.Flag("web.cors.origin", `Regex for CORS origin. It is fully anchored. Example: 'https?://(domain1|domain2)\.com'`).
 		Default(".*").StringVar(&cfg.corsRegexString)
 
+	// 指定prometheus的存储路径
 	serverOnlyFlag(a, "storage.tsdb.path", "Base path for metrics storage.").
 		Default("data/").StringVar(&cfg.serverStoragePath)
 
+	// 数据块持久化的最小时长
 	serverOnlyFlag(a, "storage.tsdb.min-block-duration", "Minimum duration of a data block before being persisted. For use in testing.").
 		Hidden().Default("2h").SetValue(&cfg.tsdb.MinBlockDuration)
-
+	// 数据块持久化最长时长
 	serverOnlyFlag(a, "storage.tsdb.max-block-duration",
 		"Maximum duration compacted blocks may span. For use in testing. (Defaults to 10% of the retention period.)").
 		Hidden().PlaceHolder("<duration>").SetValue(&cfg.tsdb.MaxBlockDuration)
-
+	// 数据块持久化块大小
 	serverOnlyFlag(a, "storage.tsdb.max-block-chunk-segment-size",
 		"The maximum size for a single chunk segment in a block. Example: 512MB").
 		Hidden().PlaceHolder("<bytes>").BytesVar(&cfg.tsdb.MaxBlockChunkSegmentSize)
 
+	//WAL 配置
 	serverOnlyFlag(a, "storage.tsdb.wal-segment-size",
 		"Size at which to split the tsdb WAL segment files. Example: 100MB").
 		Hidden().PlaceHolder("<bytes>").BytesVar(&cfg.tsdb.WALSegmentSize)
 
+	// 数据保留时间
 	serverOnlyFlag(a, "storage.tsdb.retention.time", "How long to retain samples in storage. If neither this flag nor \"storage.tsdb.retention.size\" is set, the retention time defaults to "+defaultRetentionString+". Units Supported: y, w, d, h, m, s, ms.").
 		SetValue(&cfg.tsdb.RetentionDuration)
-
+	// 数据保留大小
 	serverOnlyFlag(a, "storage.tsdb.retention.size", "Maximum number of bytes that can be stored for blocks. A unit is required, supported units: B, KB, MB, GB, TB, PB, EB. Ex: \"512MB\". Based on powers-of-2, so 1KB is 1024B.").
 		BytesVar(&cfg.tsdb.MaxBytes)
-
+	// 禁用锁文件
+	// 永远禁止在开发环境使用启用
+	// 仅在紧急数据恢复 或者 开发调试的场景中才允许使用
 	serverOnlyFlag(a, "storage.tsdb.no-lockfile", "Do not create lockfile in data directory.").
 		Default("false").BoolVar(&cfg.tsdb.NoLockfile)
 
+	// 是否允许 TSDB 对 时间范围重叠的数据块（overlapping blocks） 进行垂直压缩（vertical compaction）
 	serverOnlyFlag(a, "storage.tsdb.allow-overlapping-compaction", "Allow compaction of overlapping blocks. If set to false, TSDB stops vertical compaction and leaves overlapping blocks there. The use case is to let another component handle the compaction of overlapping blocks.").
 		Default("true").Hidden().BoolVar(&cfg.tsdb.EnableOverlappingCompaction)
-
+	// 是否启用WAL压缩
 	serverOnlyFlag(a, "storage.tsdb.wal-compression", "Compress the tsdb WAL.").
 		Hidden().Default("true").BoolVar(&cfg.tsdb.WALCompression)
-
+	// 采用什么压缩算法
 	serverOnlyFlag(a, "storage.tsdb.wal-compression-type", "Compression algorithm for the tsdb WAL.").
 		Hidden().Default(string(wlog.CompressionSnappy)).EnumVar(&cfg.tsdb.WALCompressionType, string(wlog.CompressionSnappy), string(wlog.CompressionZstd))
 
 	serverOnlyFlag(a, "storage.tsdb.head-chunks-write-queue-size", "Size of the queue through which head chunks are written to the disk to be m-mapped, 0 disables the queue completely. Experimental.").
 		Default("0").IntVar(&cfg.tsdb.HeadChunksWriteQueueSize)
-
+	// 每个块目标采样数
 	serverOnlyFlag(a, "storage.tsdb.samples-per-chunk", "Target number of samples per chunk.").
 		Default("120").Hidden().IntVar(&cfg.tsdb.SamplesPerChunk)
 
+	// 压缩延迟最大百分比
 	serverOnlyFlag(a, "storage.tsdb.delayed-compaction.max-percent", "Sets the upper limit for the random compaction delay, specified as a percentage of the head chunk range. 100 means the compaction can be delayed by up to the entire head chunk range. Only effective when the delayed-compaction feature flag is enabled.").
 		Default("10").Hidden().IntVar(&cfg.tsdb.CompactionDelayMaxPercent)
 
@@ -479,24 +492,30 @@ func main() {
 	a.Flag("storage.remote.flush-deadline", "How long to wait flushing sample on shutdown or config reload.").
 		Default("1m").PlaceHolder("<duration>").SetValue(&cfg.RemoteFlushDeadline)
 
+	// 读取样本数个数限制，避免内存超限制
 	serverOnlyFlag(a, "storage.remote.read-sample-limit", "Maximum overall number of samples to return via the remote read interface, in a single query. 0 means no limit. This limit is ignored for streamed response types.").
 		Default("5e7").IntVar(&cfg.web.RemoteReadSampleLimit)
 
+	// 通过 gate 控制并发数量，避免并发数量过高
+	// prometheus 并发控制器
 	serverOnlyFlag(a, "storage.remote.read-concurrent-limit", "Maximum number of concurrent remote read calls. 0 means no limit.").
 		Default("10").IntVar(&cfg.web.RemoteReadConcurrencyLimit)
-
+	// 读取单个样本字节数限制
 	serverOnlyFlag(a, "storage.remote.read-max-bytes-in-frame", "Maximum number of bytes in a single frame for streaming remote read response types before marshalling. Note that client might have limit on frame size as well. 1MB as recommended by protobuf by default.").
 		Default("1048576").IntVar(&cfg.web.RemoteReadBytesInFrame)
 
+	// 告警故障恢复容忍时时间间隔
 	serverOnlyFlag(a, "rules.alert.for-outage-tolerance", "Max time to tolerate prometheus outage for restoring \"for\" state of alert.").
 		Default("1h").SetValue(&cfg.outageTolerance)
 
+	// 告警恢复时间间隔
 	serverOnlyFlag(a, "rules.alert.for-grace-period", "Minimum duration between alert and restored \"for\" state. This is maintained only for alerts with configured \"for\" time greater than grace period.").
 		Default("10m").SetValue(&cfg.forGracePeriod)
-
+	// 告警重试时间间隔
 	serverOnlyFlag(a, "rules.alert.resend-delay", "Minimum amount of time to wait before resending an alert to Alertmanager.").
 		Default("1m").SetValue(&cfg.resendDelay)
 
+	// 规则评估最大并发协程数量
 	serverOnlyFlag(a, "rules.max-concurrent-evals", "Global concurrency limit for independent rules that can run concurrently. When set, \"query.max-concurrency\" may need to be adjusted accordingly.").
 		Default("4").Int64Var(&cfg.maxConcurrentEvals)
 
@@ -505,22 +524,23 @@ func main() {
 
 	a.Flag("scrape.timestamp-tolerance", "Timestamp tolerance. See https://github.com/prometheus/prometheus/issues/7846 for more context. Experimental. This flag will be removed in a future release.").
 		Hidden().Default("2ms").DurationVar(&scrape.ScrapeTimestampTolerance)
-
+	// 告警队列长度
 	serverOnlyFlag(a, "alertmanager.notification-queue-capacity", "The capacity of the queue for pending Alertmanager notifications.").
 		Default("10000").IntVar(&cfg.notifier.QueueCapacity)
 
 	serverOnlyFlag(a, "alertmanager.drain-notification-queue-on-shutdown", "Send any outstanding Alertmanager notifications when shutting down. If false, any outstanding Alertmanager notifications will be dropped when shutting down.").
 		Default("true").BoolVar(&cfg.notifier.DrainOnShutdown)
 
+	// 回溯时间间隔
 	serverOnlyFlag(a, "query.lookback-delta", "The maximum lookback duration for retrieving metrics during expression evaluations and federation.").
 		Default("5m").SetValue(&cfg.lookbackDelta)
-
+	// 查询超时时间间隔
 	serverOnlyFlag(a, "query.timeout", "Maximum time a query may take before being aborted.").
 		Default("2m").SetValue(&cfg.queryTimeout)
 
 	serverOnlyFlag(a, "query.max-concurrency", "Maximum number of queries executed concurrently.").
 		Default("20").IntVar(&cfg.queryConcurrency)
-
+	// 查询样本数个数限制
 	serverOnlyFlag(a, "query.max-samples", "Maximum number of samples a single query can load into memory. Note that queries will fail if they try to load more samples than this into memory, so this also limits the number of samples a query can return.").
 		Default("50000000").IntVar(&cfg.queryMaxSamples)
 
@@ -556,6 +576,7 @@ func main() {
 	notifs := notifications.NewNotifications(cfg.maxNotificationsSubscribers, prometheus.DefaultRegisterer)
 	cfg.web.NotificationsSub = notifs.Sub
 	cfg.web.NotificationsGetter = notifs.Get
+	// 通知prometheus已经开始启动
 	notifs.AddNotification(notifications.StartingUp)
 
 	logger.Info("Start prometheus")
@@ -566,11 +587,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// 在agent模式下，不允许使用serverOnlyFlags，不能配置服务模式下使用的配置，就算配置也不生效，这里直接让用户重新配置
+	// 避免造成配置误解
 	if agentMode && len(serverOnlyFlags) > 0 {
 		fmt.Fprintf(os.Stderr, "The following flag(s) can not be used in agent mode: %q", serverOnlyFlags)
 		os.Exit(3)
 	}
-
+	// agent模式下，不允许使用agentOnlyFlags，不能配置agent模式下使用的配置，就算配置也不生效，这里直接让用户重新配置
 	if !agentMode && len(agentOnlyFlags) > 0 {
 		fmt.Fprintf(os.Stderr, "The following flag(s) can only be used in agent mode: %q", agentOnlyFlags)
 		os.Exit(3)
@@ -587,12 +610,14 @@ func main() {
 		localStoragePath = cfg.agentStoragePath
 	}
 
+	// 添加url
 	cfg.web.ExternalURL, err = computeExternalURL(cfg.prometheusURL, cfg.web.ListenAddresses[0])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, fmt.Errorf("parse external URL %q: %w", cfg.prometheusURL, err))
 		os.Exit(2)
 	}
 
+	// 设置浏览器跨域请求过滤规则
 	cfg.web.CORSOrigin, err = compileCORSRegexString(cfg.corsRegexString)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, fmt.Errorf("could not compile CORS regex string %q: %w", cfg.corsRegexString, err))
@@ -737,6 +762,7 @@ func main() {
 	// can only register metrics specific to a SD instance.
 	// Kubernetes client metrics are the same for the whole process -
 	// they are not specific to an SD instance.
+	// 注册client_go的 metrics指标数据
 	err = discovery.RegisterK8sClientMetricsWithPrometheus(prometheus.DefaultRegisterer)
 	if err != nil {
 		logger.Error("failed to register Kubernetes client metrics", "err", err)
@@ -1062,6 +1088,7 @@ func main() {
 	{
 		// Termination handler.
 		term := make(chan os.Signal, 1)
+		// 监听SIGTERM信号
 		signal.Notify(term, os.Interrupt, syscall.SIGTERM)
 		cancel := make(chan struct{})
 		g.Add(
@@ -1071,6 +1098,7 @@ func main() {
 				case sig := <-term:
 					logger.Warn("Received an OS signal, exiting gracefully...", "signal", sig.String())
 					reloadReady.Close()
+				// 监听web服务退出信号
 				case <-webHandler.Quit():
 					logger.Warn("Received termination request via web service, exiting gracefully...")
 				case <-cancel:

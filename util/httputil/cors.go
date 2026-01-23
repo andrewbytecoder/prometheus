@@ -28,6 +28,8 @@ var corsHeaders = map[string]string{
 
 // SetCORS enables cross-site script calls.
 func SetCORS(w http.ResponseWriter, o *regexp.Regexp, r *http.Request) {
+	// 非浏览器跨域请求，不需要进行处理
+	// 只有浏览器的请求才会自动添加该字段
 	origin := r.Header.Get("Origin")
 	if origin == "" {
 		return
