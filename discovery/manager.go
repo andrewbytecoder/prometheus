@@ -159,6 +159,7 @@ type Manager struct {
 
 	// How long to wait before sending updates to the channel. The variable
 	// should only be modified in unit tests.
+	// 服务发现更新时间间隔
 	updatert time.Duration
 
 	// The triggerSend channel signals to the Manager that new updates have been received from providers.
@@ -354,6 +355,7 @@ func (m *Manager) sender() {
 
 	for {
 		select {
+		// ctx 调用cancel之后停止
 		case <-m.ctx.Done():
 			return
 		case <-ticker.C: // Some discoverers send updates too often, so we throttle these with the ticker.
