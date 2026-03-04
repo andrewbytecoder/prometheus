@@ -449,7 +449,7 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 // objects.
 type GlobalConfig struct {
 	// How frequently to scrape targets by default.
-	// 抓取的时间间隔
+	// 抓取的时间间隔，如果其他配置没有设置，则使用这个默认值
 	ScrapeInterval model.Duration `yaml:"scrape_interval,omitempty"`
 	// The default timeout when scraping targets.
 	ScrapeTimeout model.Duration `yaml:"scrape_timeout,omitempty"`
