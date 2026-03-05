@@ -476,6 +476,7 @@ type GlobalConfig struct {
 	//使用 offset -15s，可以让查询“向前看”15秒，从而选择从 09:00:00 到 10:00:00 的完美对齐的一小时数据。
 	RuleQueryOffset model.Duration `yaml:"rule_query_offset,omitempty"`
 	// File to which PromQL queries are logged.
+	// 每次查询都会记录到文件中
 	QueryLogFile string `yaml:"query_log_file,omitempty"`
 	// File to which scrape failures are logged.
 	ScrapeFailureLogFile string `yaml:"scrape_failure_log_file,omitempty"`
@@ -829,6 +830,7 @@ func (c *ScrapeConfig) Validate(globalConfig GlobalConfig) error {
 	}
 	// First set the correct scrape interval, then check that the timeout
 	// (inferred or explicit) is not greater than that.
+	// 默认的指标抓取时间间隔不能为0
 	if c.ScrapeInterval == 0 {
 		c.ScrapeInterval = globalConfig.ScrapeInterval
 	}
