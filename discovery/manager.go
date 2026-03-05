@@ -313,6 +313,7 @@ func (m *Manager) cleaner(p *Provider) {
 		delete(m.targets, poolKey{s, p.name})
 	}
 	p.mu.RUnlock()
+
 	m.targetsMtx.Unlock()
 	if p.done != nil {
 		p.done()

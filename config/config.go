@@ -452,6 +452,7 @@ type GlobalConfig struct {
 	// 抓取的时间间隔，如果其他配置没有设置，则使用这个默认值
 	ScrapeInterval model.Duration `yaml:"scrape_interval,omitempty"`
 	// The default timeout when scraping targets.
+	// 抓取的超时时间，如果其他配置没有设置，则使用这个默认值
 	ScrapeTimeout model.Duration `yaml:"scrape_timeout,omitempty"`
 	// The protocols to negotiate during a scrape. It tells clients what
 	// protocol are accepted by Prometheus and with what weight (most wanted is first).
@@ -526,6 +527,7 @@ func (s ScrapeProtocol) HeaderMediaType() string {
 }
 
 var (
+	// 支持的抓取协议类型
 	PrometheusProto      ScrapeProtocol = "PrometheusProto"
 	PrometheusText0_0_4  ScrapeProtocol = "PrometheusText0.0.4"
 	PrometheusText1_0_0  ScrapeProtocol = "PrometheusText1.0.0"
@@ -640,7 +642,17 @@ func (c *GlobalConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 // isZero returns true iff the global config is the zero value.
+// It is used to detect whether the global config was set to the zero value.
 func (c *GlobalConfig) isZero() bool {
+	// ExternalLabels 标签为空
+	// ScrapeInterval 抓取时间间隔为空
+	// ScrapeTimeout 抓取超时时间为空
+	// EvaluationInterval 评估时间间隔为空
+	// RuleQueryOffset 规则查询偏移时间为空
+	// QueryLogFile 查询日志文件为空
+	// ScrapeFailureLogFile 抓取失败日志文件为空
+	// ScrapeProtocols 抓取协议为空
+	// 以上信息为空的情况下，就算其他配置信息不为空，也会被认为没有设置，使用默认值
 	return c.ExternalLabels.IsEmpty() &&
 		c.ScrapeInterval == 0 &&
 		c.ScrapeTimeout == 0 &&
