@@ -458,11 +458,22 @@ type GlobalConfig struct {
 	// protocol are accepted by Prometheus and with what weight (most wanted is first).
 	// Supported values (case sensitive): PrometheusProto, OpenMetricsText0.0.1,
 	// OpenMetricsText1.0.0, PrometheusText0.0.4.
+	//# If left unset both here and in an individual scrape config, the
+	//# negotiation order used in that scrape config depends on the effective
+	//# value of scrape_native_histograms for that scrape config.
+	//# If scrape_native_histograms is false, the order is
+	//# [ OpenMetricsText1.0.0, OpenMetricsText0.0.1, PrometheusText1.0.0, PrometheusText0.0.4 ].
+	//# If scrape_native_histograms is true, the order is
+	//# [ PrometheusProto, OpenMetricsText1.0.0, OpenMetricsText0.0.1, PrometheusText1.0.0, PrometheusText0.0.4 ].
+	// 协议类型列表，给出对方能够提供的抓取指标的协议类型
 	ScrapeProtocols []ScrapeProtocol `yaml:"scrape_protocols,omitempty"`
 	// How frequently to evaluate rules by default.
-	// 添加 rules评估的时间间隔
+	// 添加 rules评估的时间间隔，间隔多久评估一下rules信息
 	EvaluationInterval model.Duration `yaml:"evaluation_interval,omitempty"`
 	// Offset the rule evaluation timestamp of this particular group by the specified duration into the past to ensure the underlying metrics have been received.
+	// 在标准的 Prometheus 规则评估模型中，规则在 evaluation_interval 定义的时间点进行评估，查询表达式只能访问该评估时间点及之前的数据。RuleQueryOffset 打破了这一限制。
+	//例如，一个每小时计算一次的规则（如 max_over_time(...[1h])），可能需要对齐到整点（如 10:00:00）。如果原始数据抓取间隔是15秒，规则在10:00:15评估，标准的 [1h] 会选择从 09:00:15 到 10:00:15 的数据，没有对齐到整小时。
+	//使用 offset -15s，可以让查询“向前看”15秒，从而选择从 09:00:00 到 10:00:00 的完美对齐的一小时数据。
 	RuleQueryOffset model.Duration `yaml:"rule_query_offset,omitempty"`
 	// File to which PromQL queries are logged.
 	QueryLogFile string `yaml:"query_log_file,omitempty"`
@@ -590,10 +601,14 @@ func (c *GlobalConfig) SetDirectory(dir string) {
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
+// 借用yaml.Unmarshaler 接口，实现指定配置内容进行特殊解析
 func (c *GlobalConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	// Create a clean global config as the previous one was already populated
 	// by the default due to the YAML parser behavior for empty blocks.
 	gc := &GlobalConfig{}
+	// 因为内部会按照类型进行再次判断，如果还是 GlobalConfig 类型那么就能进行  UnmarshalYAML 调用
+	// 存在陷入无线递归的死循环可能
+	// 重新定义类型，避免陷入无线递归，这样能够在 反射中进行正常的解析
 	type plain GlobalConfig
 	if err := unmarshal((*plain)(gc)); err != nil {
 		return err
@@ -614,6 +629,7 @@ func (c *GlobalConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	// First set the correct scrape interval, then check that the timeout
 	// (inferred or explicit) is not greater than that.
 	if gc.ScrapeInterval == 0 {
+		// 如果解析出来的 抓取时间配置为0，这里将对应的值设置为默认值 1分钟
 		gc.ScrapeInterval = DefaultGlobalConfig.ScrapeInterval
 	}
 	if gc.ScrapeTimeout > gc.ScrapeInterval {
@@ -752,7 +768,6 @@ type ScrapeConfig struct {
 
 	// We cannot do proper Go type embedding below as the parser will then parse
 	// values arbitrarily into the overflow maps of further-down types.
-
 	ServiceDiscoveryConfigs discovery.Configs       `yaml:"-"`
 	HTTPClientConfig        config.HTTPClientConfig `yaml:",inline"`
 
