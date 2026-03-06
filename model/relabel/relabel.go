@@ -32,9 +32,10 @@ var (
 	relabelTarget = regexp.MustCompile(`^(?:(?:[a-zA-Z_]|\$(?:\{\w+\}|\w+))+\w*)+$`)
 
 	DefaultRelabelConfig = Config{
-		Action:      Replace,
-		Separator:   ";",
-		Regex:       MustNewRegexp("(.*)"),
+		Action:    Replace,
+		Separator: ";",
+		Regex:     MustNewRegexp("(.*)"),
+		// 当不写任何 replacement的时候，默认为$1
 		Replacement: "$1",
 	}
 )
@@ -44,10 +45,13 @@ type Action string
 
 const (
 	// Replace performs a regex replacement.
+	// 替换，将原先的标签替换
 	Replace Action = "replace"
 	// Keep drops targets for which the input does not match the regex.
+	// 如果匹配成功保留，如果匹配失败则目标会被丢弃
 	Keep Action = "keep"
 	// Drop drops targets for which the input does match the regex.
+	// 匹配成功丢弃目标，匹配失败则保留
 	Drop Action = "drop"
 	// KeepEqual drops targets for which the input does not match the target.
 	KeepEqual Action = "keepequal"
@@ -58,8 +62,10 @@ const (
 	// LabelMap copies labels to other labelnames based on a regex.
 	LabelMap Action = "labelmap"
 	// LabelDrop drops any label matching the regex.
+	// 只是将匹配的标签进行删除
 	LabelDrop Action = "labeldrop"
 	// LabelKeep drops any label not matching the regex.
+	// 保留匹配的标签，用于精简标签集
 	LabelKeep Action = "labelkeep"
 	// Lowercase maps input letters to their lower case.
 	Lowercase Action = "lowercase"
@@ -87,8 +93,10 @@ type Config struct {
 	// with the configured separator in order.
 	SourceLabels model.LabelNames `yaml:"source_labels,flow,omitempty" json:"sourceLabels,omitempty"`
 	// Separator is the string between concatenated values from the source labels.
+	// 将标签的value值进行合并时，使用的分隔符
 	Separator string `yaml:"separator,omitempty" json:"separator,omitempty"`
 	// Regex against which the concatenation is matched.
+	// Default is '(.*)'.
 	Regex Regexp `yaml:"regex,omitempty" json:"regex,omitempty"`
 	// Modulus to take of the hash of concatenated values from the source labels.
 	Modulus uint64 `yaml:"modulus,omitempty" json:"modulus,omitempty"`
@@ -96,6 +104,7 @@ type Config struct {
 	// Regexp interpolation is allowed for the replace action.
 	TargetLabel string `yaml:"target_label,omitempty" json:"targetLabel,omitempty"`
 	// Replacement is the regex replacement pattern to be used.
+	// 匹配成功则将匹配到的内容进行替换，默认为$1
 	Replacement string `yaml:"replacement,omitempty" json:"replacement,omitempty"`
 	// Action is the action to be performed for the relabeling.
 	Action Action `yaml:"action,omitempty" json:"action,omitempty"`
