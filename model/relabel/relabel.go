@@ -280,7 +280,9 @@ func ProcessBuilder(lb *labels.Builder, cfgs ...*Config) (keep bool) {
 
 func relabel(cfg *Config, lb *labels.Builder) (keep bool) {
 	var va [16]string
+	// 创建一个 长度为0 但是底层为 16 的切片
 	values := va[:0]
+	// cap 为16 但是长度为0
 	if len(cfg.SourceLabels) > cap(values) {
 		values = make([]string, 0, len(cfg.SourceLabels))
 	}
