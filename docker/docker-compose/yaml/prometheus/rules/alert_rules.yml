@@ -1,0 +1,63 @@
+groups:
+  - name: host_alerts
+    rules:
+      # CPU 使用率警报
+      - alert: HighCPUUsage
+        expr: |
+          100 - (
+            avg by(instance) (
+              rate(node_cpu_seconds_total{mode="idle"}[5m])
+            ) * 100
+          ) > 10
+        for: 30s  # 持续30s才触发
+        labels:
+          severity: warning
+          team: infrastructure
+          alert_type: resource
+        annotations:
+          summary: "高CPU使用率 (实例 {{ $labels.instance }})"
+          description: |
+            {{ $labels.instance }} 的CPU使用率超过10%。
+            当前值: {{ $value | printf "%.2f" }}%
+            阈值: 10%
+          dashboard: " http://localhost:3000/d/node-exporter-full "
+          runbook: " https://example.com/runbooks/high-cpu-usage "
+
+      # 可选：内存使用率警报
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes)
+            / node_memory_MemTotal_bytes * 100
+          ) > 85
+        for: 2m
+        labels:
+          severity: warning
+          team: infrastructure
+          alert_type: resource
+        annotations:
+          summary: "高内存使用率 (实例 {{ $labels.instance }})"
+          description: |
+            {{ $labels.instance }} 的内存使用率超过85%。
+            当前值: {{ $value | printf "%.2f" }}%
+            阈值: 85%
+
+      # 可选：磁盘使用率警报
+      - alert: HighDiskUsage
+        expr: |
+          (
+            node_filesystem_size_bytes{mountpoint="/", fstype!="rootfs"}
+            - node_filesystem_free_bytes{mountpoint="/", fstype!="rootfs"}
+          )
+          / node_filesystem_size_bytes{mountpoint="/", fstype!="rootfs"} * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+          team: infrastructure
+          alert_type: resource
+        annotations:
+          summary: "高磁盘使用率 (实例 {{ $labels.instance }})"
+          description: |
+            {{ $labels.instance }} 的根分区磁盘使用率超过90%。
+            当前值: {{ $value | printf "%.2f" }}%
+            阈值: 90%

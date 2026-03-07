@@ -1,0 +1,77 @@
+global:
+  # 全局配置
+  smtp_smarthost: 'smtp.gmail.com:587'  # 如果使用邮件通知
+  smtp_from: 'alerts@example.com'
+  smtp_auth_username: 'your-email@gmail.com'
+  smtp_auth_password: 'your-app-password'
+  smtp_require_tls: true
+
+  # Slack Webhook 配置（可选）
+  # slack_api_url: 'https://hooks.slack.com/services/...'
+
+# 路由配置
+route:
+  group_by: ['alertname', 'severity', 'instance']
+  group_wait: 30s      # 等待时间，收集同一组的警报
+  group_interval: 5m   # 同一组警报发送间隔
+  repeat_interval: 4h  # 重复警报发送间隔
+  receiver: 'default-receiver'
+  
+  # 子路由（可根据标签路由到不同接收器）
+  routes:
+    - match:
+        severity: critical
+      receiver: 'critical-receiver'
+      group_wait: 10s
+      repeat_interval: 1m
+    
+    - match:
+        severity: warning
+      receiver: 'warning-receiver'
+      group_wait: 60s
+      repeat_interval: 2m
+
+# 抑制规则（减少重复警报）
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
+
+# 接收器配置
+receivers:
+  # 默认接收器（Webhook 示例）
+  - name: 'default-receiver'
+    webhook_configs:
+      - url: 'http://webhook.site/your-unique-url'  # 测试用
+        send_resolved: true
+    
+    # 邮件通知（可选）
+    email_configs:
+      - to: 'admin@example.com'
+        send_resolved: true
+        headers:
+          subject: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}'
+    
+    # Slack 通知（可选）
+    # slack_configs:
+    #   - channel: '#alerts'
+    #     send_resolved: true
+    #     title: '{{ .GroupLabels.alertname }}'
+    #     text: '{{ .CommonAnnotations.summary }}'
+
+  # 关键警报接收器
+  - name: 'critical-receiver'
+    webhook_configs:
+      - url: 'http://webhook.site/critical-alerts'
+        send_resolved: true
+    email_configs:
+      - to: 'oncall-team@example.com'
+        send_resolved: true
+
+  # 警告接收器
+  - name: 'warning-receiver'
+    webhook_configs:
+      - url: 'http://webhook.site/warning-alerts'
+        send_resolved: true
