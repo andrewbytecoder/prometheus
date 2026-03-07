@@ -1,0 +1,67 @@
+global:
+  scrape_interval: 15s
+#  # 开启查询日志
+#  query_log_enabled: true
+#  # 查询日志文件路径，将日志写入指定的文件
+#  query_log_file: /opt/log/query_log_file.log
+
+rule_files:
+  - /prometheus/rules/alert_rules.yml
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9800']
+
+  - job_name: 'node_export'
+    static_configs:
+      - targets: ['localhost:9100']
+
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['localhost:3000']
+
+  - job_name: 'blackbox_exporter'  # collect blackbox exporter's operational metrics.
+    static_configs:
+      - targets: ['localhost:9115']
+
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['localhost:9093']
+
+
+  - job_name: 'blackbox_http'  # https
+    metrics_path: /probe
+    params:
+      module: [http_2xx]  # Look for a HTTP 200 response.
+    static_configs:
+      - targets:
+        - http://prometheus.io    # Target to probe with http.
+        - https://www.baidu.com.com   # Target to probe with https.
+        - localhost:3000 # grafana
+    relabel_configs:
+      # keep：丢弃source_labels指定的值中没有匹配到regex正则表达式内容的target。
+      # drop：丢弃source_labels指定的值中匹配到regex正则表达式内容的target。
+      # hashmod：将多个source_labels的值进行hash，作为target标签的值。
+      # labelmap：针对所有标签名来匹配regex，然后将匹配的标签的值复制到replacement所指定的新标签中。
+      # labelkeep：针对所有标签名来匹配regex，任何不匹配的标签将从标签集中删除。
+      # labeldrop：针对所有标签来匹配regex，任何匹配的标签将从标签集中删除。
+      - action: keep  #
+        source_labels: [__address__]
+        target_label: __param_target  # target_label 替换key值
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: localhost:9115  # replacement 替换内容，为value值
+
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets:
+      - localhost:9093
+   # 可选：配置警报重标记
+  alert_relabel_configs:
+    - source_labels: [instance]
+      regex: '([^:]+):\d+'
+      target_label: hostname
+      replacement: $1

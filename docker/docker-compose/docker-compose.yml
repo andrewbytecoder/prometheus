@@ -1,0 +1,64 @@
+version: '3.2'
+services:
+  prometheus-compose:
+    image: prom/prometheus
+    container_name: prometheus-compose
+    volumes:
+      - ./yaml/prometheus/:/prometheus/
+      - ./yaml/prometheus/rules/:/prometheus/rules/
+      - ./data:/prometheus/data
+    command:
+      - --web.listen-address=:9800
+    network_mode: host
+    pid: host
+    depends_on:
+      - node_exporter
+
+  alertmanager:
+    image: prom/alertmanager
+    container_name: alertmanager
+    network_mode: host
+    pid: host
+    volumes:
+      - ./yaml/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - ./alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    depends_on:
+      - prometheus-compose
+
+  node_exporter:
+    image: quay.io/prometheus/node-exporter
+    container_name: node_exporter
+    command:
+      - '--path.rootfs=/host'
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    network_mode: host
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+
+  blackbox_exporter:
+    image: quay.io/prometheus/blackbox-exporter:latest
+    container_name: blackbox_exporter
+    command:
+      - --config.file=/config/blackbox.yml
+    network_mode: host
+    pid: host
+    volumes:
+      - ./yaml/blackbox/:/config
+
+  grafana-prometheus:
+    image: grafana/grafana
+    container_name: grafana-prometheus
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    network_mode: host
+    pid: host
+    depends_on:
+      - prometheus-compose
