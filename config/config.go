@@ -41,6 +41,9 @@ import (
 )
 
 var (
+	// 正则表达式，用来匹配以下两种路径
+	// 1. 纯静态路径 /etc/prometheus/rules.yml
+	// 2. 以通配符结尾的路径 /etc/prometheus/*.yml
 	patRulePath     = regexp.MustCompile(`^[^*]*(\*[^/]*)?$`)
 	reservedHeaders = map[string]struct{}{
 		// NOTE: authorization is checked specially,
@@ -269,8 +272,11 @@ type Config struct {
 	Runtime RuntimeConfig `yaml:"runtime,omitempty"`
 	// 报警配置
 	AlertingConfig AlertingConfig `yaml:"alerting,omitempty"`
-	RuleFiles      []string       `yaml:"rule_files,omitempty"`
+	// 支持完全静态路由，和正则匹配路由
+	RuleFiles []string `yaml:"rule_files,omitempty"`
 	// 目标抓取配置文件
+	// scrape_config_files 是 Prometheus 2.43 版本引入的新特性，它允许从不同的文件中包含 scrape 配置，使配置管理更加模块化和易于组织
+	// 有了这个配置之后就能自动读取指定文件夹的配置文件，和将大的配置文件拆分为多个文件，方面配置的管理
 	ScrapeConfigFiles []string        `yaml:"scrape_config_files,omitempty"`
 	ScrapeConfigs     []*ScrapeConfig `yaml:"scrape_configs,omitempty"`
 
@@ -377,6 +383,7 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	// We want to set c to the defaults and then overwrite it with the input.
 	// To make unmarshal fill the plain data struct rather than calling UnmarshalYAML
 	// again, we have to hide it using a type indirection.
+	// 避免解析过程中出现无限递归
 	type plain Config
 	if err := unmarshal((*plain)(c)); err != nil {
 		return err
@@ -1014,7 +1021,9 @@ type ExemplarsConfig struct {
 
 // AlertingConfig configures alerting and alertmanager related configs.
 type AlertingConfig struct {
-	AlertRelabelConfigs []*relabel.Config   `yaml:"alert_relabel_configs,omitempty"`
+	// 告警 labels relabel  config
+	AlertRelabelConfigs []*relabel.Config `yaml:"alert_relabel_configs,omitempty"`
+	// Alertmanager configs
 	AlertmanagerConfigs AlertmanagerConfigs `yaml:"alertmanagers,omitempty"`
 }
 
@@ -1095,23 +1104,27 @@ type AlertmanagerConfig struct {
 	// We cannot do proper Go type embedding below as the parser will then parse
 	// values arbitrarily into the overflow maps of further-down types.
 
-	ServiceDiscoveryConfigs discovery.Configs       `yaml:"-"`
-	HTTPClientConfig        config.HTTPClientConfig `yaml:",inline"`
-	SigV4Config             *sigv4.SigV4Config      `yaml:"sigv4,omitempty"`
+	// ServiceDiscoveryConfigs 定义 Alertmanager 的服务发现配置，用于动态发现 Alertmanager 实例。
+	ServiceDiscoveryConfigs discovery.Configs `yaml:"-"`
+	// HTTPClientConfig 配置与 Alertmanager 通信时的 HTTP 客户端设置，包括 TLS、认证等。
+	HTTPClientConfig config.HTTPClientConfig `yaml:",inline"`
+	// SigV4Config AWS SigV4 认证配置，用于与 AWS 托管的 Alertmanager 进行认证通信。
+	SigV4Config *sigv4.SigV4Config `yaml:"sigv4,omitempty"`
 
-	// The URL scheme to use when talking to Alertmanagers.
+	// Scheme 指定与 Alertmanager 通信时使用的 URL 方案（如 http 或 https）。
 	Scheme string `yaml:"scheme,omitempty"`
-	// Path prefix to add in front of the push endpoint path.
+	// PathPrefix 指定在推送端点路径前添加的路径前缀，用于代理或子路径部署场景。
 	PathPrefix string `yaml:"path_prefix,omitempty"`
-	// The timeout used when sending alerts.
+	// Timeout 指定发送告警时使用的超时时间，超过此时间未响应将视为失败。
 	Timeout model.Duration `yaml:"timeout,omitempty"`
 
-	// The api version of Alertmanager.
+	// APIVersion 指定使用的 Alertmanager API 版本，目前支持 v2 版本。
 	APIVersion AlertmanagerAPIVersion `yaml:"api_version"`
 
-	// List of Alertmanager relabel configurations.
+	// RelabelConfigs 定义 Alertmanager 目标的重标签配置，在发现后对目标进行处理。
 	RelabelConfigs []*relabel.Config `yaml:"relabel_configs,omitempty"`
-	// Relabel alerts before sending to the specific alertmanager.
+	// AlertRelabelConfigs 定义在发送到特定 Alertmanager 之前对告警进行的重标签配置。
+	// prometheus 中的配置会对所有的告警目标进行，这里的配置仅仅针对单个告警器进行relabel
 	AlertRelabelConfigs []*relabel.Config `yaml:"alert_relabel_configs,omitempty"`
 }
 

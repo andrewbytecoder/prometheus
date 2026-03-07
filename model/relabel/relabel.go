@@ -32,6 +32,10 @@ var (
 	relabelTarget = regexp.MustCompile(`^(?:(?:[a-zA-Z_]|\$(?:\{\w+\}|\w+))+\w*)+$`)
 
 	DefaultRelabelConfig = Config{
+		// 如果没有指定 action 默认就是 replace
+		// replace 的动作只是将对应的labels替换成信的labels，并不会直接替换掉原先的labels
+		// 替换labels生成一个新的label并添加到结果中，原先的label还保留
+		// 如果配置多个 relabel 规则，会按照顺序进行执行
 		Action:    Replace,
 		Separator: ";",
 		Regex:     MustNewRegexp("(.*)"),
