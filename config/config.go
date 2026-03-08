@@ -277,8 +277,9 @@ type Config struct {
 	// 目标抓取配置文件
 	// scrape_config_files 是 Prometheus 2.43 版本引入的新特性，它允许从不同的文件中包含 scrape 配置，使配置管理更加模块化和易于组织
 	// 有了这个配置之后就能自动读取指定文件夹的配置文件，和将大的配置文件拆分为多个文件，方面配置的管理
-	ScrapeConfigFiles []string        `yaml:"scrape_config_files,omitempty"`
-	ScrapeConfigs     []*ScrapeConfig `yaml:"scrape_configs,omitempty"`
+	ScrapeConfigFiles []string `yaml:"scrape_config_files,omitempty"`
+	// 抓取配置
+	ScrapeConfigs []*ScrapeConfig `yaml:"scrape_configs,omitempty"`
 
 	// 存储配置
 	StorageConfig StorageConfig `yaml:"storage,omitempty"`
@@ -546,7 +547,7 @@ func (s ScrapeProtocol) HeaderMediaType() string {
 }
 
 var (
-	// 支持的抓取协议类型
+	// PrometheusProto 支持的抓取协议类型
 	PrometheusProto      ScrapeProtocol = "PrometheusProto"
 	PrometheusText0_0_4  ScrapeProtocol = "PrometheusText0.0.4"
 	PrometheusText1_0_0  ScrapeProtocol = "PrometheusText1.0.0"
@@ -706,21 +707,29 @@ type ScrapeConfigs struct {
 type ScrapeConfig struct {
 	// The job name to which the job label is set by default.
 	// job 名，所有抓取指标里面会显示是哪个job抓取的
+	// 每个任务都需要有个对应的job名字，一个job后面对应一个任务，一个任务可以抓取很多的targets
 	JobName string `yaml:"job_name"`
 	// Indicator whether the scraped metrics should remain unmodified.
-	// 抓取指标是否保持原始格式，不进行任何修改
+	// 抓取指标是否保持原始格式，不进行任何修改，当抓取的指标和要添加的指标之间存在冲突的时候
+	// 用来指示保留原有指标，比如高可用场景中，使用一个prometheus采集其prometheus的数据，可以用这个配置告诉prometheus保留原有的标签
+	// 默认为false，prometheus会用自己的标签覆盖目标暴漏的标签
+	// 在prometheus进行多级联邦的时候非常有用
 	HonorLabels bool `yaml:"honor_labels,omitempty"`
 	// Indicator whether the scraped timestamps should be respected.
-	// 是否保持原始时间戳
+	// 是否保持原始时间戳 多级联邦的时候是否保留原有的时间戳
 	HonorTimestamps bool `yaml:"honor_timestamps"`
 	// Indicator whether to track the staleness of the scraped timestamps.
-	// 是否跟踪时间戳的 staleness
+	// 是否跟踪时间戳的 staleness(陈旧性)
+	// Staleness 是指时间序列不再更新的状态。当监控目标消失或停止暴露指标时，Prometheus 需要知道这些序列已经"过时"。
 	TrackTimestampsStaleness bool `yaml:"track_timestamps_staleness"`
 	// A set of query parameters with which the target is scraped.
+	// 用来向抓取目标传递查询参数
 	Params url.Values `yaml:"params,omitempty"`
 	// How frequently to scrape the targets of this scrape config.
+	// 目标的抓取时间间隔
 	ScrapeInterval model.Duration `yaml:"scrape_interval,omitempty"`
 	// The timeout for scraping targets of this config.
+	// 抓取目标的超时时间
 	ScrapeTimeout model.Duration `yaml:"scrape_timeout,omitempty"`
 	// The protocols to negotiate during a scrape. It tells clients what
 	// protocol are accepted by Prometheus and with what preference (most wanted is first).
@@ -731,16 +740,23 @@ type ScrapeConfig struct {
 	// is not provided, blank, or not one of the expected values.
 	// Supported values (case sensitive): PrometheusProto, OpenMetricsText0.0.1,
 	// OpenMetricsText1.0.0, PrometheusText1.0.0, PrometheusText0.0.4.
+	// 最后的备选选项，备选抓取协议
 	ScrapeFallbackProtocol ScrapeProtocol `yaml:"fallback_scrape_protocol,omitempty"`
 	// Whether to scrape a classic histogram, even if it is also exposed as a native histogram.
+	// 如果某个指标同时暴漏了直方图的经典版本和一个原生直方图，是否强制抓取 classic histogram，设置为true的时候会同时抓取两个指标
+	// 默认为false，只抓取原生直方图指标
 	AlwaysScrapeClassicHistograms bool `yaml:"always_scrape_classic_histograms,omitempty"`
 	// Whether to convert all scraped classic histograms into a native histogram with custom buckets.
+	// 是否将抓取的经典直方图转化为一个原生直方图
 	ConvertClassicHistogramsToNHCB bool `yaml:"convert_classic_histograms_to_nhcb,omitempty"`
 	// File to which scrape failures are logged.
+	// 抓取失败的日志文件
 	ScrapeFailureLogFile string `yaml:"scrape_failure_log_file,omitempty"`
 	// The HTTP resource path on which to fetch metrics from targets.
+	// 指标路径，默认为/metrics
 	MetricsPath string `yaml:"metrics_path,omitempty"`
 	// The URL scheme with which to fetch metrics from targets.
+	// 抓取指标的协议
 	Scheme string `yaml:"scheme,omitempty"`
 	// Indicator whether to request compressed response from the target.
 	EnableCompression bool `yaml:"enable_compression"`
@@ -776,6 +792,7 @@ type ScrapeConfig struct {
 
 	// We cannot do proper Go type embedding below as the parser will then parse
 	// values arbitrarily into the overflow maps of further-down types.
+	// 可能为static_configs  kubernetes_sd_configs 等，因此需要 - 然后自定义解析函数对结构体进行解析
 	ServiceDiscoveryConfigs discovery.Configs       `yaml:"-"`
 	HTTPClientConfig        config.HTTPClientConfig `yaml:",inline"`
 
@@ -917,16 +934,20 @@ type StorageConfig struct {
 }
 
 // TSDBConfig configures runtime reloadable configuration options.
+// OutOfOrderTimeWindowFlag: "30m" (model.Duration) -> OutOfOrderTimeWindow: 1800000 (int64, 毫秒)
 type TSDBConfig struct {
 	// OutOfOrderTimeWindow sets how long back in time an out-of-order sample can be inserted
 	// into the TSDB. This flag is typically set while unmarshaling the configuration file and translating
 	// OutOfOrderTimeWindowFlag's duration. The unit of this flag is expected to be the same as any
 	// other timestamp in the TSDB.
+	// 运行时使用：实际的时间窗口值 单位 毫秒
 	OutOfOrderTimeWindow int64
 
 	// OutOfOrderTimeWindowFlag holds the parsed duration from the config file.
 	// During unmarshall, this is converted into milliseconds and stored in OutOfOrderTimeWindow.
 	// This should not be used directly and must be converted into OutOfOrderTimeWindow.
+	// 配置解析：从 YAML 读取的原始值
+	// 在不配置的情况下禁止乱序写入，如果有部分prometheus出现乱序数据无法恢复，可以尝试配置这个参数启动prometheus启动
 	OutOfOrderTimeWindowFlag model.Duration `yaml:"out_of_order_time_window,omitempty"`
 }
 
@@ -971,7 +992,9 @@ func (t *TracingClientType) UnmarshalYAML(unmarshal func(interface{}) error) err
 
 // TracingConfig configures the tracing options.
 type TracingConfig struct {
-	ClientType       TracingClientType `yaml:"client_type,omitempty"`
+	// http 还是grpc
+	ClientType TracingClientType `yaml:"client_type,omitempty"`
+	// tracing endpoint
 	Endpoint         string            `yaml:"endpoint,omitempty"`
 	SamplingFraction float64           `yaml:"sampling_fraction,omitempty"`
 	Insecure         bool              `yaml:"insecure,omitempty"`

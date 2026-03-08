@@ -21,7 +21,6 @@ import (
 	"unsafe"
 
 	"github.com/prometheus/common/model"
-	"golang.org/x/net/http2"
 )
 
 const (
@@ -94,7 +93,6 @@ func (ls *Labels) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err := unmarshal(&m); err != nil {
 		return err
 	}
-	http2.ClientConn{}
 	*ls = FromMap(m)
 	return nil
 }

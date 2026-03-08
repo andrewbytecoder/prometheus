@@ -171,6 +171,9 @@ type Rule struct {
 
 // RuleNode adds yaml.v3 layer to support line and column outputs for invalid rules.
 type RuleNode struct {
+	// 使用Yaml node而不是使用字符串，可以延迟解析复杂表达式
+	// 提供更好的错误信息
+	// 支持配置验证和格式化
 	Record        yaml.Node         `yaml:"record,omitempty"`
 	Alert         yaml.Node         `yaml:"alert,omitempty"`
 	Expr          yaml.Node         `yaml:"expr"`
