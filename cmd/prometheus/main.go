@@ -405,6 +405,8 @@ func main() {
 	a.Flag("web.page-title", "Document title of Prometheus instance.").
 		Default("Prometheus Time Series Collection and Processing Server").StringVar(&cfg.web.PageTitle)
 
+	// 匹配请求来源的 Origin 字段，必须符合的才能发送请求
+	// It is fully anchored 正则必须匹配整个字符串而不是部分
 	a.Flag("web.cors.origin", `Regex for CORS origin. It is fully anchored. Example: 'https?://(domain1|domain2)\.com'`).
 		Default(".*").StringVar(&cfg.corsRegexString)
 
@@ -1609,15 +1611,17 @@ func computeExternalURL(u, listenAddr string) (*url.URL, error) {
 		u = fmt.Sprintf("http://%s:%s/", hostname, port)
 	}
 
+	// u 里面不能是 " ' 开头的字符串，否则会报错
 	if startsOrEndsWithQuote(u) {
 		return nil, errors.New("URL must not begin or end with quotes")
 	}
 
+	// 将url 解析成url.URL对象
 	eu, err := url.Parse(u)
 	if err != nil {
 		return nil, err
 	}
-
+	// url 以 http:// 开头, 经过url.Parse() 解析 url.Path为 "/data" 开头的uri路径
 	ppref := strings.TrimRight(eu.Path, "/")
 	if ppref != "" && !strings.HasPrefix(ppref, "/") {
 		ppref = "/" + ppref
