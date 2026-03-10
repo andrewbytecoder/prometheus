@@ -682,6 +682,7 @@ func main() {
 		}
 
 		// Check for overflows. This limits our max retention to 100y.
+		// prometheus tsdb数据最大支持保持  100 年 的数据
 		if cfg.tsdb.RetentionDuration < 0 {
 			y, err := model.ParseDuration("100y")
 			if err != nil {
@@ -742,12 +743,7 @@ func main() {
 		localStorage = &readyStorage{stats: tsdb.NewDBStats()}
 		scraper      = &readyScrapeManager{}
 		// 用于指标的远程存储
-		remoteStorage = remote.NewStorage(logger.With("component", "remote"),
-			prometheus.DefaultRegisterer,
-			localStorage.StartTime,
-			localStoragePath,
-			time.Duration(cfg.RemoteFlushDeadline),
-			scraper, cfg.scrape.AppendMetadata)
+		remoteStorage = remote.NewStorage(logger.With("component", "remote"), prometheus.DefaultRegisterer, localStorage.StartTime, localStoragePath, time.Duration(cfg.RemoteFlushDeadline), scraper, cfg.scrape.AppendMetadata)
 		// 为localStorage与remoteStorage的读写代理器，且remoteStorage可以有多个传入
 		fanoutStorage = storage.NewFanout(logger, localStorage, remoteStorage)
 	)

@@ -504,6 +504,7 @@ func (n *Manager) setMore() {
 	// 不用担心丢失，如果上次发送的没有接收，这里会进行阻塞，知道上次护理完成
 	//	 但是可能乱序
 	case n.more <- struct{}{}:
+	// 这里使用select 是为了放置more里面已经存在数据，这里会直接返回，不会阻塞
 	default:
 	}
 }

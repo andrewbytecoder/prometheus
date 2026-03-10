@@ -95,6 +95,7 @@ func NewManager(ctx context.Context, logger *slog.Logger, registerer prometheus.
 		registerer:  registerer,
 		sdMetrics:   sdMetrics,
 	}
+	//  使用闭包的原则实现 options 架构模式
 	for _, option := range options {
 		option(mgr)
 	}
