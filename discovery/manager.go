@@ -156,6 +156,7 @@ type Manager struct {
 	// providers keeps track of SD providers.
 	providers []*Provider
 	// The sync channel sends the updates as a map where the key is the job value from the scrape config.
+	// 实现根据chan动态的进行 reload
 	syncCh chan map[string][]*targetgroup.Group
 
 	// How long to wait before sending updates to the channel. The variable
@@ -365,6 +366,7 @@ func (m *Manager) sender() {
 			case <-m.triggerSend:
 				m.metrics.SentUpdates.Inc()
 				select {
+				// 尝试发送
 				case m.syncCh <- m.allGroups():
 				default:
 					m.metrics.DelayedUpdates.Inc()

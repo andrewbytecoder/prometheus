@@ -239,6 +239,7 @@ func (m *Manager) Update(interval time.Duration, files []string, externalLabels 
 				newg.CopyState(oldg)
 			}
 			wg.Done()
+			// 就算提前启动规则评估，也要等到 prometheus 启动后才开始评估规则， block就是为了放置Update调用的时候prometheus还在启动过程中
 			// Wait with starting evaluation until the rule manager
 			// is told to run. This is necessary to avoid running
 			// queries against a bootstrapping storage.

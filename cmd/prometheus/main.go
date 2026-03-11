@@ -1207,6 +1207,7 @@ func main() {
 		cancel := make(chan struct{})
 
 		var checksum string
+		// 通过产生checksum来判断配置文件是否发生改变，这样能够有效避免要挨个对比配置文件所引起的问题
 		if cfg.enableAutoReload {
 			checksum, err = config.GenerateChecksum(cfg.configFile)
 			if err != nil {
