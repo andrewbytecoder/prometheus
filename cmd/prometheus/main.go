@@ -1227,6 +1227,7 @@ func main() {
 			func() error {
 				<-reloadReady.C
 
+				// 阻塞进行select
 				for {
 					select {
 					case <-hup:
@@ -1315,17 +1316,19 @@ func main() {
 		)
 	}
 	if !agentMode {
-		// TSDB.
+		// TSDB. 将prometheus中关于tsdb的配置转化为标准的tsdb配置
 		opts := cfg.tsdb.ToTSDBOptions()
 		cancel := make(chan struct{})
 		g.Add(
 			func() error {
 				logger.Info("Starting TSDB ...")
 				if cfg.tsdb.WALSegmentSize != 0 {
+					// WAL 块的大小必须是 10M 到256M之间的大小
 					if cfg.tsdb.WALSegmentSize < 10*1024*1024 || cfg.tsdb.WALSegmentSize > 256*1024*1024 {
 						return errors.New("flag 'storage.tsdb.wal-segment-size' must be set between 10MB and 256MB")
 					}
 				}
+				// 单个块中段的最大大小，单位转换为二进制字节
 				if cfg.tsdb.MaxBlockChunkSegmentSize != 0 {
 					if cfg.tsdb.MaxBlockChunkSegmentSize < 1024*1024 {
 						return errors.New("flag 'storage.tsdb.max-block-chunk-segment-size' must be set over 1MB")
@@ -1370,6 +1373,7 @@ func main() {
 			},
 		)
 	}
+	// 代码模式 remote storage和 local storage
 	if agentMode {
 		// WAL storage.
 		opts := cfg.agent.ToAgentOptions(cfg.tsdb.OutOfOrderTimeWindow)
@@ -1887,7 +1891,7 @@ type tsdbOptions struct {
 	StripeSize                     int              // 分片大小
 	MinBlockDuration               model.Duration   // 数据块持久化前的最小持续时间
 	MaxBlockDuration               model.Duration   // 压缩块可能跨越的最大持续时间
-	OutOfOrderTimeWindow           int64            // 乱序时间窗口（毫秒）
+	OutOfOrderTimeWindow           int64            // 乱序时间窗口（毫秒），当采集数据存在乱序时，允许的时间窗口（毫秒），部分网络比较慢的情况下需要设置此值
 	EnableExemplarStorage          bool             // 是否启用样本存储
 	MaxExemplars                   int64            // 最大样本数
 	EnableMemorySnapshotOnShutdown bool             // 关机时是否启用内存快照
